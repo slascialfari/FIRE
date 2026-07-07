@@ -6,13 +6,11 @@ import {
   SliderNumberField,
   ToggleField,
 } from './controls';
-import LifeEventsPanel from './LifeEventsPanel';
 import { suggestedVoluntaryTopup } from '../lib/simulate';
 import { formatEUR } from '../lib/format';
 
 const pct = (v) => `${v}%`;
 const age = (v) => `${v}`;
-const years = (v) => `${v} yrs`;
 
 export default function InputsPanel({ inputs, setField, currentAge, onReset, onShare }) {
   const suggestedTopup = suggestedVoluntaryTopup(inputs, currentAge);
@@ -87,11 +85,11 @@ export default function InputsPanel({ inputs, setField, currentAge, onReset, onS
         />
         <SliderNumberField
           label="Yearly expense growth"
-          hint="Extra lifestyle-cost growth on top of inflation, until semi-retirement — not a replacement for inflation. After semi-retirement, the spending-shape curve below takes over instead of continuing to compound."
+          hint="Flat annual growth rate applied to your expenses for the whole projection — set it to include inflation if that's how you'd like to think about it."
           value={inputs.expenseGrowthRate}
           onChange={(v) => setField('expenseGrowthRate', v)}
           min={0}
-          max={5}
+          max={8}
           step={0.1}
           format={pct}
         />
@@ -137,80 +135,8 @@ export default function InputsPanel({ inputs, setField, currentAge, onReset, onS
       </SectionCard>
 
       <SectionCard
-        title="Spending shape in retirement"
-        description={
-          "Real spending typically doesn't keep compounding forever — research on the \"retirement spending smile\" " +
-          '(Blanchett, 2014) finds it eases through the Go-Go and Slow-Go years, then rises again late in life for ' +
-          'healthcare. Percentages below are relative to your spending level at semi-retirement (100%).'
-        }
-      >
-        <SliderNumberField
-          label="Go-Go years"
-          hint="Active early retirement — often higher discretionary spending (travel, hobbies)"
-          value={inputs.goGoYears}
-          onChange={(v) => setField('goGoYears', v)}
-          min={0}
-          max={20}
-          format={years}
-        />
-        <SliderNumberField
-          label="Go-Go spending"
-          value={inputs.goGoMultiplier}
-          onChange={(v) => setField('goGoMultiplier', v)}
-          min={80}
-          max={130}
-          format={pct}
-        />
-        <SliderNumberField
-          label="Slow-Go years"
-          hint="Less active — spending typically eases off"
-          value={inputs.slowGoYears}
-          onChange={(v) => setField('slowGoYears', v)}
-          min={0}
-          max={20}
-          format={years}
-        />
-        <SliderNumberField
-          label="Slow-Go spending"
-          value={inputs.slowGoMultiplier}
-          onChange={(v) => setField('slowGoMultiplier', v)}
-          min={50}
-          max={120}
-          format={pct}
-        />
-        <SliderNumberField
-          label="No-Go rise"
-          hint="Years to rise toward late-life spending (healthcare, care costs)"
-          value={inputs.noGoRiseYears}
-          onChange={(v) => setField('noGoRiseYears', v)}
-          min={0}
-          max={20}
-          format={years}
-        />
-        <SliderNumberField
-          label="No-Go spending"
-          value={inputs.noGoMultiplier}
-          onChange={(v) => setField('noGoMultiplier', v)}
-          min={50}
-          max={150}
-          format={pct}
-        />
-      </SectionCard>
-
-      <SectionCard
-        title="Life events"
-        description="One-off shocks or recurring costs (a child, a home repair, …) that add to target expenses for the years they apply."
-      >
-        <LifeEventsPanel
-          events={inputs.lifeEvents}
-          setEvents={(events) => setField('lifeEvents', events)}
-          currentAge={currentAge}
-        />
-      </SectionCard>
-
-      <SectionCard
         title="Emergency fund"
-        description="A cash buffer tracked separately from the portfolio, checked only against one-off events above (recurring costs are funded the normal way)."
+        description='A cash buffer tracked separately from the portfolio, checked against "Shit happens" events on the timeline (life events and opportunities are funded/received the normal way).'
       >
         <SelectField
           label="Funding approach"

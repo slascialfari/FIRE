@@ -16,6 +16,7 @@ import { CHART_CHROME, INCOME_COLORS, pick } from '../lib/theme';
 const SERIES = [
   { key: 'work', label: INCOME_COLORS.work.label },
   { key: 'portfolio', label: INCOME_COLORS.portfolio.label },
+  { key: 'emergencyFund', label: INCOME_COLORS.emergencyFund.label },
   { key: 'pension', label: INCOME_COLORS.pension.label },
   { key: 'gap', label: INCOME_COLORS.gap.label },
 ];
@@ -26,6 +27,7 @@ function buildChartData(rows) {
     year: row.year,
     work: row.incomeWork,
     portfolio: row.incomePortfolio,
+    emergencyFund: row.incomeEmergencyFund,
     pension: row.incomePension,
     gap: row.unfundedGap,
     target: row.targetExpenseMonthly,

@@ -44,7 +44,7 @@ export default function MetricsPanel({ result, inputs }) {
             <span aria-hidden="true">{efShortfall ? '⚠' : '✓'}</span>
             {efShortfall
               ? `Emergency fund short by ${formatEUR(emergencyFund.shortfallAmount)} at age ${emergencyFund.shortfallAge}`
-              : 'Emergency fund covers all one-off events'}
+              : 'Emergency fund covers all "shit happens" events'}
           </div>
         )}
       </div>
