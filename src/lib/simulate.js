@@ -5,7 +5,7 @@ export const DEFAULT_INPUTS = {
   portfolioValue: 50000,
   monthlyContribution: 1000,
   monthlyExpenses: 2500,
-  expenseGrowthRate: 1.5, // % per year, ON TOP OF inflation (model is otherwise in real/today's-euro terms)
+  expenseGrowthRate: 1.5, // % per year, compounding across the whole projection — set this to include inflation if you like
 
   pensionContributionBase: 'net', // 'net' | 'gross'
   grossMonthlyIncome: 4600,
@@ -24,66 +24,88 @@ export const DEFAULT_INPUTS = {
 
   workIncomePct: 50, // % of target expenses still covered by work during semi-retirement
 
-  // Spending shape in retirement (the "retirement spending smile" — Blanchett 2014):
-  // real spending typically eases through the Go-Go/Slow-Go years then rises again
-  // late in life for healthcare, rather than compounding forever. Percentages are
-  // relative to the spending level at semi-retirement (100%).
-  goGoYears: 10,
-  goGoMultiplier: 105,
-  slowGoYears: 10,
-  slowGoMultiplier: 85,
-  noGoRiseYears: 10,
-  noGoMultiplier: 100,
-
-  // Life events: one-off ("shock") or recurring (e.g. a child) additions to target
-  // expenses. Each: { id, label, type: 'oneoff' | 'recurring', startAge, endAge, amount }.
-  // amount is a total € for 'oneoff', €/month for 'recurring'.
+  // Life events, dropped on the timeline. Each event's shape comes from a preset
+  // (see eventPresets.js): { id, category: 'life'|'shock'|'opportunity', presetId,
+  // label, age, oneoff, monthly, growthPct, durationYears, incomeReductionPct,
+  // fundingSource: 'main'|'emergencyFund'|'expenses' }.
+  // 'life' and 'shock' events are funded from whichever bucket their fundingSource
+  // points to: Main portfolio directly, the Emergency fund, or the Expenses fund —
+  // the latter two absorb what they can, with the rest overflowing to Main.
+  // 'opportunity' events (inheritance) inject a lump sum straight into the portfolio.
   lifeEvents: [],
 
-  // Emergency fund: a cash buffer tracked independently of the portfolio, checked
-  // against one-off life events only (recurring events are ordinary expenses, not
-  // emergencies, and are funded the normal way above).
+  // Emergency fund: a cash buffer tracked independently of the portfolio, for
+  // events routed to it (see fundingSource above).
   emergencyFundMode: 'build', // 'lump' | 'build'
   emergencyFundLumpSum: 15000,
   emergencyFundTarget: 15000,
   emergencyFundMonthlyContribution: 150,
   emergencyFundReturnRate: 1, // % real — kept low since it should stay liquid
+
+  // Expenses fund: a second cash-like buffer for mid-term, non-emergency costs
+  // (e.g. a wedding or a child's costs) — invested more like a low-volatility
+  // money-market fund, so a slightly higher return than the emergency fund but
+  // still conservative. Also tracked independently of the main portfolio.
+  expensesFundMode: 'build', // 'lump' | 'build'
+  expensesFundLumpSum: 10000,
+  expensesFundTarget: 10000,
+  expensesFundMonthlyContribution: 100,
+  expensesFundReturnRate: 2, // % real — low-volatility, money-market-like
 };
 
-function lerp(a, b, t) {
-  return a + (b - a) * Math.min(Math.max(t, 0), 1);
+// Every dropped event's cost at a given age, bucketed by its chosen funding
+// source. Job loss is sized against `incomeWork`, the phase's ordinary
+// (event-independent) work income. Opportunity events are handled separately
+// as direct portfolio injections (see opportunityInjectionAt).
+function eventCostsBySource(age, events, incomeWork) {
+  const buckets = { main: 0, emergencyFund: 0, expenses: 0 };
+  events.forEach((e) => {
+    if (e.category === 'opportunity') return;
+    const endAge = e.age + (Number(e.durationYears) || 0);
+    let cost = 0;
+    if (e.presetId === 'jobloss') {
+      if (age >= e.age && age < endAge) {
+        cost = incomeWork * ((Number(e.incomeReductionPct) || 0) / 100);
+      }
+    } else {
+      if (Math.round(e.age) === age) cost += (Number(e.oneoff) || 0) / 12;
+      if (e.monthly && age >= e.age && age < endAge) {
+        const growth = e.category === 'life' ? Math.pow(1 + (Number(e.growthPct) || 0) / 100, age - e.age) : 1;
+        cost += Number(e.monthly) * growth;
+      }
+    }
+    const bucket = e.fundingSource === 'expenses' || e.fundingSource === 'emergencyFund' ? e.fundingSource : 'main';
+    buckets[bucket] += cost;
+  });
+  return buckets;
 }
 
-// Multiplier on the semi-retirement-age spending level: rises through the Go-Go
-// years, eases through Slow-Go, then rises again toward No-Go (healthcare costs).
-function smileMultiplier(age, inputs) {
-  if (age <= inputs.semiRetirementAge) return 1;
-  const goGoEnd = inputs.semiRetirementAge + Math.max(inputs.goGoYears, 0.001);
-  const slowGoEnd = goGoEnd + Math.max(inputs.slowGoYears, 0.001);
-  const noGoEnd = slowGoEnd + Math.max(inputs.noGoRiseYears, 0.001);
-  const goGo = inputs.goGoMultiplier / 100;
-  const slowGo = inputs.slowGoMultiplier / 100;
-  const noGo = inputs.noGoMultiplier / 100;
-
-  if (age <= goGoEnd) return lerp(1, goGo, (age - inputs.semiRetirementAge) / (goGoEnd - inputs.semiRetirementAge));
-  if (age <= slowGoEnd) return lerp(goGo, slowGo, (age - goGoEnd) / (slowGoEnd - goGoEnd));
-  if (age <= noGoEnd) return lerp(slowGo, noGo, (age - slowGoEnd) / (noGoEnd - slowGoEnd));
-  return noGo;
+// 'opportunity' category (inheritance, windfalls) — a lump sum split across the
+// main portfolio, emergency fund, and expenses fund by the event's own share
+// percentages; whatever isn't allocated (the shares needn't sum to 100%) is
+// treated as spent, with no lasting effect. Not routed through target expenses.
+function opportunityInjectionAt(age, events) {
+  const totals = { main: 0, emergencyFund: 0, expenses: 0 };
+  events
+    .filter((e) => e.category === 'opportunity' && Math.round(e.age) === age)
+    .forEach((e) => {
+      const amount = Number(e.oneoff) || 0;
+      const mainPct = Math.max(0, Number(e.mainSharePct) || 0);
+      const efPct = Math.max(0, Number(e.emergencyFundSharePct) || 0);
+      const expPct = Math.max(0, Number(e.expensesFundSharePct) || 0);
+      const totalPct = mainPct + efPct + expPct;
+      // If the shares add up to more than 100%, scale them down proportionally
+      // so the windfall is never over-allocated; under 100% just leaves a
+      // "spent" remainder, which is fine.
+      const scale = totalPct > 100 ? 100 / totalPct : 1;
+      totals.main += amount * ((mainPct * scale) / 100);
+      totals.emergencyFund += amount * ((efPct * scale) / 100);
+      totals.expenses += amount * ((expPct * scale) / 100);
+    });
+  return totals;
 }
 
-function recurringEventAdjustment(age, events) {
-  return events
-    .filter((e) => e.type === 'recurring' && age >= e.startAge && age <= e.endAge)
-    .reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
-}
-
-function oneoffEventCostAt(age, events) {
-  return events
-    .filter((e) => e.type === 'oneoff' && Math.round(e.startAge) === age)
-    .reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
-}
-
-const END_AGE = 100;
+export const END_AGE = 100;
 const DEPLETION_EPSILON = 0.5; // ignore sub-cent noise when flagging a shortfall
 
 export function getCurrentAge(dobString) {
@@ -149,8 +171,6 @@ export function runSimulation(inputs) {
   }
 
   const lifeEvents = inputs.lifeEvents || [];
-  const retirementBaselineExpense =
-    inputs.monthlyExpenses * Math.pow(1 + inputs.expenseGrowthRate / 100, Math.max(inputs.semiRetirementAge - currentAge, 0));
 
   const rows = [];
   let portfolio = inputs.portfolioValue;
@@ -160,43 +180,31 @@ export function runSimulation(inputs) {
   let emergencyFundShortfallAge = null;
   let emergencyFundShortfallAmount = 0;
 
+  let expensesFund = inputs.expensesFundMode === 'lump' ? inputs.expensesFundLumpSum : 0;
+  let expensesFundShortfallAge = null;
+  let expensesFundShortfallAmount = 0;
+
   for (let age = currentAge; age <= END_AGE; age++) {
     const yearsElapsed = age - currentAge;
-    const baseExpenseMonthly =
-      age <= inputs.semiRetirementAge
-        ? inputs.monthlyExpenses * Math.pow(1 + inputs.expenseGrowthRate / 100, yearsElapsed)
-        : retirementBaselineExpense * smileMultiplier(age, inputs);
-    // The voluntary pension top-up is a real monthly cost, so it's folded into target
+    // A single flat rate, compounding across the whole projection — no separate
+    // retirement-phase curve. Set it to include inflation if that's how you think about it.
+    const baseExpenseMonthly = inputs.monthlyExpenses * Math.pow(1 + inputs.expenseGrowthRate / 100, yearsElapsed);
+
+    // The voluntary pension top-up is a real monthly cost, folded into target
     // expenses (and therefore the income chart) rather than being a hidden withdrawal.
     const topupMonthly =
       age >= inputs.semiRetirementAge && age < inputs.pensionStartAge ? (inputs.voluntaryTopupAnnual || 0) / 12 : 0;
-    const livingExpenseMonthly = Math.max(0, baseExpenseMonthly + recurringEventAdjustment(age, lifeEvents));
-    const targetExpenseMonthly = livingExpenseMonthly + topupMonthly;
-    const targetExpenseAnnual = targetExpenseMonthly * 12;
     const topupAnnual = topupMonthly * 12;
 
-    // Emergency fund is tracked independently of the portfolio: it grows/tops up on
-    // its own schedule and is tested only against one-off ("shock") events, so it
-    // never changes the main funding waterfall below.
-    const oneoffCost = oneoffEventCostAt(age, lifeEvents);
-    emergencyFund *= 1 + inputs.emergencyFundReturnRate / 100;
-    if (inputs.emergencyFundMode === 'build' && emergencyFund < inputs.emergencyFundTarget) {
-      emergencyFund = Math.min(inputs.emergencyFundTarget, emergencyFund + inputs.emergencyFundMonthlyContribution * 12);
-    }
-    if (oneoffCost > 0) {
-      if (emergencyFund < oneoffCost && emergencyFundShortfallAge === null) {
-        emergencyFundShortfallAge = age;
-        emergencyFundShortfallAmount = oneoffCost - emergencyFund;
-      }
-      emergencyFund = Math.max(0, emergencyFund - oneoffCost);
-    }
-
+    // Phase & the phase's ordinary work income — based on the base expense line
+    // only. Dropped events are funded separately below, wherever their chosen
+    // funding source points, regardless of phase.
     let phase;
     let rate;
     let incomeWork = 0;
     let incomePension = 0;
     let contributionAnnual = 0;
-    let withdrawalRequestedAnnual = 0;
+    let nonEventWithdrawalRequestedAnnual = 0;
 
     if (age < inputs.semiRetirementAge) {
       phase = PHASES.WORKING;
@@ -207,49 +215,117 @@ export function runSimulation(inputs) {
     } else if (age < inputs.fullRetirementAge) {
       phase = PHASES.SEMI_RETIREMENT;
       rate = inputs.drawdownReturn / 100;
-      incomeWork = livingExpenseMonthly * (inputs.workIncomePct / 100);
-      const livingPortfolioShareAnnual = livingExpenseMonthly * 12 - incomeWork * 12;
-      withdrawalRequestedAnnual = livingPortfolioShareAnnual + topupAnnual;
+      incomeWork = baseExpenseMonthly * (inputs.workIncomePct / 100);
+      nonEventWithdrawalRequestedAnnual = baseExpenseMonthly * 12 - incomeWork * 12;
     } else if (age < inputs.pensionStartAge) {
       phase = PHASES.FULL_RETIREMENT_PRE_PENSION;
       rate = inputs.drawdownReturn / 100;
-      withdrawalRequestedAnnual = livingExpenseMonthly * 12 + topupAnnual;
+      nonEventWithdrawalRequestedAnnual = baseExpenseMonthly * 12;
     } else {
       phase = PHASES.PENSION;
       rate = inputs.drawdownReturn / 100;
-      incomePension = Math.min(projectedPensionMonthly, targetExpenseMonthly);
-      const portfolioShareMonthly = Math.max(0, targetExpenseMonthly - projectedPensionMonthly);
-      withdrawalRequestedAnnual = portfolioShareMonthly * 12;
+      incomePension = Math.min(projectedPensionMonthly, baseExpenseMonthly);
+      nonEventWithdrawalRequestedAnnual = Math.max(0, baseExpenseMonthly - projectedPensionMonthly) * 12;
     }
+
+    // A chosen fund ("Supported by") only steps in for whatever regular income
+    // can't cover — it's not the exclusive source. Income headroom is whatever's
+    // left of this phase's own income (salary while working, pension once it
+    // starts) after covering the baseline living expenses; that headroom absorbs
+    // event costs first, and only the remainder is routed to the chosen fund.
+    const incomeHeadroomMonthly =
+      phase === PHASES.PENSION
+        ? Math.max(0, projectedPensionMonthly - baseExpenseMonthly)
+        : Math.max(0, incomeWork - baseExpenseMonthly);
+
+    const rawCosts = eventCostsBySource(age, lifeEvents, incomeWork);
+    const totalEventCostMonthly = rawCosts.main + rawCosts.emergencyFund + rawCosts.expenses;
+    const headroomUsedMonthly = Math.min(incomeHeadroomMonthly, totalEventCostMonthly);
+    const remainingScale = totalEventCostMonthly > 0 ? (totalEventCostMonthly - headroomUsedMonthly) / totalEventCostMonthly : 0;
+    const costs = {
+      main: rawCosts.main * remainingScale,
+      emergencyFund: rawCosts.emergencyFund * remainingScale,
+      expenses: rawCosts.expenses * remainingScale,
+    };
+    // The income headroom used shows up as extra work/pension income covering
+    // the events, so the chart's funding sources still total to target expenses.
+    if (phase === PHASES.PENSION) {
+      incomePension += headroomUsedMonthly;
+    } else {
+      incomeWork += headroomUsedMonthly;
+    }
+
+    const emergencyFundCostAnnual = costs.emergencyFund * 12;
+    emergencyFund *= 1 + inputs.emergencyFundReturnRate / 100;
+    if (inputs.emergencyFundMode === 'build' && emergencyFund < inputs.emergencyFundTarget) {
+      emergencyFund = Math.min(inputs.emergencyFundTarget, emergencyFund + inputs.emergencyFundMonthlyContribution * 12);
+    }
+    const emergencyFundCoveredAnnual = Math.min(emergencyFund, emergencyFundCostAnnual);
+    emergencyFund -= emergencyFundCoveredAnnual;
+    const emergencyFundResidualAnnual = emergencyFundCostAnnual - emergencyFundCoveredAnnual;
+    if (emergencyFundResidualAnnual > DEPLETION_EPSILON && emergencyFundShortfallAge === null) {
+      emergencyFundShortfallAge = age;
+      emergencyFundShortfallAmount = emergencyFundResidualAnnual;
+    }
+
+    const expensesFundCostAnnual = costs.expenses * 12;
+    expensesFund *= 1 + inputs.expensesFundReturnRate / 100;
+    if (inputs.expensesFundMode === 'build' && expensesFund < inputs.expensesFundTarget) {
+      expensesFund = Math.min(inputs.expensesFundTarget, expensesFund + inputs.expensesFundMonthlyContribution * 12);
+    }
+    const expensesFundCoveredAnnual = Math.min(expensesFund, expensesFundCostAnnual);
+    expensesFund -= expensesFundCoveredAnnual;
+    const expensesFundResidualAnnual = expensesFundCostAnnual - expensesFundCoveredAnnual;
+    if (expensesFundResidualAnnual > DEPLETION_EPSILON && expensesFundShortfallAge === null) {
+      expensesFundShortfallAge = age;
+      expensesFundShortfallAmount = expensesFundResidualAnnual;
+    }
+
+    // Target expenses show the full, honest cost — including anything income
+    // headroom or the emergency/expenses funds happen to cover — so nothing is
+    // hidden from the headline number.
+    const targetExpenseMonthly = baseExpenseMonthly + totalEventCostMonthly + topupMonthly;
 
     const portfolioStart = portfolio;
-    const grown = portfolio * (1 + rate);
+    const afterGrowth = portfolioStart * (1 + rate);
+    const afterContribution = phase === PHASES.WORKING ? afterGrowth + contributionAnnual : afterGrowth;
+    const requestedOutflowAnnual =
+      (phase === PHASES.WORKING ? 0 : nonEventWithdrawalRequestedAnnual) +
+      topupAnnual +
+      costs.main * 12 +
+      emergencyFundResidualAnnual +
+      expensesFundResidualAnnual;
 
     let portfolioEnd;
-    let actualWithdrawalTotal;
-    if (phase === PHASES.WORKING) {
-      portfolioEnd = grown + contributionAnnual;
-      actualWithdrawalTotal = 0;
-    } else {
-      const uncapped = grown - withdrawalRequestedAnnual;
-      if (uncapped < 0) {
-        actualWithdrawalTotal = Math.max(0, grown);
-        portfolioEnd = 0;
-        if (age >= inputs.semiRetirementAge && depletionAge === null) {
-          depletionAge = age;
-        }
-      } else {
-        actualWithdrawalTotal = withdrawalRequestedAnnual;
-        portfolioEnd = uncapped;
+    let actualOutflowAnnual;
+    const uncapped = afterContribution - requestedOutflowAnnual;
+    if (uncapped < 0) {
+      actualOutflowAnnual = Math.max(0, afterContribution);
+      portfolioEnd = 0;
+      if (age >= inputs.semiRetirementAge && depletionAge === null) {
+        depletionAge = age;
       }
+    } else {
+      actualOutflowAnnual = requestedOutflowAnnual;
+      portfolioEnd = uncapped;
     }
 
-    // The top-up is now part of target expenses (see above), so any shortfall in
-    // funding it shows up honestly as part of the unfunded gap below, rather than
-    // being silently absorbed.
-    const incomePortfolio = phase === PHASES.WORKING ? 0 : actualWithdrawalTotal / 12;
+    // "Opportunity" events (inheritance, windfalls) split across the main
+    // portfolio, emergency fund, and expenses fund by their own share
+    // percentages, arriving after this year's growth/contribution/withdrawal.
+    const opportunityInjection = opportunityInjectionAt(age, lifeEvents);
+    portfolioEnd += opportunityInjection.main;
+    emergencyFund += opportunityInjection.emergencyFund;
+    expensesFund += opportunityInjection.expenses;
 
-    const unfundedGap = Math.max(0, targetExpenseMonthly - incomeWork - incomePortfolio - incomePension);
+    const incomePortfolio = actualOutflowAnnual / 12;
+    const incomeEmergencyFund = emergencyFundCoveredAnnual / 12;
+    const incomeExpensesFund = expensesFundCoveredAnnual / 12;
+
+    const unfundedGap = Math.max(
+      0,
+      targetExpenseMonthly - incomeWork - incomePortfolio - incomeEmergencyFund - incomeExpensesFund - incomePension,
+    );
 
     rows.push({
       age,
@@ -260,9 +336,16 @@ export function runSimulation(inputs) {
       targetExpenseMonthly,
       incomeWork,
       incomePortfolio,
+      incomeEmergencyFund,
+      incomeExpensesFund,
       incomePension,
       unfundedGap,
       emergencyFundBalance: emergencyFund,
+      expensesFundBalance: expensesFund,
+      emergencyFundCostMonthly: costs.emergencyFund,
+      emergencyFundResidualMonthly: emergencyFundResidualAnnual / 12,
+      expensesFundCostMonthly: costs.expenses,
+      expensesFundResidualMonthly: expensesFundResidualAnnual / 12,
     });
 
     portfolio = portfolioEnd;
@@ -282,7 +365,8 @@ export function runSimulation(inputs) {
     : null;
 
   const hasShortfall = depletionAge !== null || rows.some((r) => r.unfundedGap > DEPLETION_EPSILON / 12);
-  const hasOneoffEvents = lifeEvents.some((e) => e.type === 'oneoff');
+  const hasEmergencyFundEvents = lifeEvents.some((e) => (e.fundingSource || 'main') === 'emergencyFund');
+  const hasExpensesFundEvents = lifeEvents.some((e) => (e.fundingSource || 'main') === 'expenses');
 
   return {
     currentAge,
@@ -291,11 +375,18 @@ export function runSimulation(inputs) {
     estimatedPensionMonthly: inputs.pensionEstimateMode ? projectedPensionMonthly : null,
     estimatedPot,
     emergencyFund: {
-      applicable: hasOneoffEvents,
+      applicable: hasEmergencyFundEvents,
       finalBalance: rows.length ? rows[rows.length - 1].emergencyFundBalance : emergencyFund,
       shortfallAge: emergencyFundShortfallAge,
       shortfallAmount: emergencyFundShortfallAmount,
       status: emergencyFundShortfallAge === null ? 'covered' : 'shortfall',
+    },
+    expensesFund: {
+      applicable: hasExpensesFundEvents,
+      finalBalance: rows.length ? rows[rows.length - 1].expensesFundBalance : expensesFund,
+      shortfallAge: expensesFundShortfallAge,
+      shortfallAmount: expensesFundShortfallAmount,
+      status: expensesFundShortfallAge === null ? 'covered' : 'shortfall',
     },
     metrics: {
       portfolioAtSemiRetirement: valueAtOrNow(inputs.semiRetirementAge),

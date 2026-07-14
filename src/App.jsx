@@ -3,6 +3,8 @@ import InputsPanel from './components/InputsPanel';
 import MetricsPanel from './components/MetricsPanel';
 import PortfolioChart from './components/PortfolioChart';
 import IncomeChart from './components/IncomeChart';
+import EventTimeline from './components/EventTimeline';
+import CashFundsChart from './components/CashFundsChart';
 import { DEFAULT_INPUTS, getCurrentAge, runSimulation } from './lib/simulate';
 import { decodeStateFromUrl, encodeStateToUrl } from './lib/urlState';
 
@@ -52,6 +54,16 @@ function App() {
 
         <div className="order-1 lg:order-2">
           <MetricsPanel result={result} inputs={inputs} />
+
+          <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/60 p-5 mb-6">
+            <CashFundsChart result={result} events={inputs.lifeEvents} />
+            <div className="h-px bg-slate-200 dark:bg-slate-700 my-4" />
+            <EventTimeline
+              events={inputs.lifeEvents}
+              setEvents={(events) => setField('lifeEvents', events)}
+              currentAge={currentAge}
+            />
+          </div>
 
           <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/60 p-5 mb-6">
             <PortfolioChart result={result} inputs={inputs} />
