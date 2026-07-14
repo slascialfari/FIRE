@@ -17,6 +17,7 @@ const SERIES = [
   { key: 'work', label: INCOME_COLORS.work.label },
   { key: 'portfolio', label: INCOME_COLORS.portfolio.label },
   { key: 'emergencyFund', label: INCOME_COLORS.emergencyFund.label },
+  { key: 'expensesFund', label: INCOME_COLORS.expensesFund.label },
   { key: 'pension', label: INCOME_COLORS.pension.label },
   { key: 'gap', label: INCOME_COLORS.gap.label },
 ];
@@ -28,6 +29,7 @@ function buildChartData(rows) {
     work: row.incomeWork,
     portfolio: row.incomePortfolio,
     emergencyFund: row.incomeEmergencyFund,
+    expensesFund: row.incomeExpensesFund,
     pension: row.incomePension,
     gap: row.unfundedGap,
     target: row.targetExpenseMonthly,

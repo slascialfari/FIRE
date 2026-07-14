@@ -10,10 +10,26 @@ function StatTile({ label, value, sub }) {
   );
 }
 
+function FundBadge({ label, fund }) {
+  if (!fund.applicable) return null;
+  const shortfall = fund.status === 'shortfall';
+  return (
+    <div
+      className={`inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-sm font-medium ${
+        shortfall ? 'bg-[#d03b3b]/10 text-[#d03b3b]' : 'bg-[#0ca30c]/10 text-[#0ca30c]'
+      }`}
+    >
+      <span aria-hidden="true">{shortfall ? '⚠' : '✓'}</span>
+      {shortfall
+        ? `${label} short by ${formatEUR(fund.shortfallAmount)} at age ${fund.shortfallAge}`
+        : `${label} covers everything routed to it`}
+    </div>
+  );
+}
+
 export default function MetricsPanel({ result, inputs }) {
-  const { metrics, depletionAge, emergencyFund } = result;
+  const { metrics, depletionAge, emergencyFund, expensesFund } = result;
   const isShortfall = metrics.status === 'shortfall';
-  const efShortfall = emergencyFund.status === 'shortfall';
 
   const lowestValue =
     depletionAge !== null ? (
@@ -35,18 +51,8 @@ export default function MetricsPanel({ result, inputs }) {
           <span aria-hidden="true">{isShortfall ? '⚠' : '✓'}</span>
           {isShortfall ? 'Shortfall — plan needs adjustment' : 'On track'}
         </div>
-        {emergencyFund.applicable && (
-          <div
-            className={`inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-sm font-medium ${
-              efShortfall ? 'bg-[#d03b3b]/10 text-[#d03b3b]' : 'bg-[#0ca30c]/10 text-[#0ca30c]'
-            }`}
-          >
-            <span aria-hidden="true">{efShortfall ? '⚠' : '✓'}</span>
-            {efShortfall
-              ? `Emergency fund short by ${formatEUR(emergencyFund.shortfallAmount)} at age ${emergencyFund.shortfallAge}`
-              : 'Emergency fund covers all "shit happens" events'}
-          </div>
-        )}
+        <FundBadge label="Emergency fund" fund={emergencyFund} />
+        <FundBadge label="Expenses fund" fund={expensesFund} />
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">

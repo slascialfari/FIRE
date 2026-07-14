@@ -13,7 +13,7 @@ export const PRESETS = [
     label: 'Wedding',
     emoji: '💍',
     fields: ['oneoff'],
-    defaults: { oneoff: 15000, monthly: 0, growthPct: 0, durationYears: 0, incomeReductionPct: 0 },
+    defaults: { oneoff: 15000, monthly: 0, growthPct: 0, durationYears: 0, incomeReductionPct: 0, fundingSource: 'main' },
   },
   {
     id: 'child',
@@ -21,7 +21,18 @@ export const PRESETS = [
     label: 'New child',
     emoji: '👶',
     fields: ['oneoff', 'monthly', 'growthPct', 'durationYears'],
-    defaults: { oneoff: 3000, monthly: 500, growthPct: 3, durationYears: 18, incomeReductionPct: 0 },
+    defaults: {
+      oneoff: 3000,
+      monthly: 500,
+      growthPct: 3,
+      durationYears: 18,
+      incomeReductionPct: 0,
+      fundingSource: 'main',
+      // Calculator inputs (see nlAssumptions.js) — remembered so the daycare
+      // calculator re-opens with whatever the user last set.
+      daycareDaysPerWeek: 3,
+      partnerSharePct: 50,
+    },
   },
   {
     id: 'house',
@@ -29,7 +40,7 @@ export const PRESETS = [
     label: 'New house',
     emoji: '🏠',
     fields: ['oneoff', 'monthly', 'durationYears'],
-    defaults: { oneoff: 20000, monthly: 300, growthPct: 0, durationYears: 40, incomeReductionPct: 0 },
+    defaults: { oneoff: 20000, monthly: 300, growthPct: 0, durationYears: 40, incomeReductionPct: 0, fundingSource: 'main' },
   },
   {
     id: 'car',
@@ -37,7 +48,7 @@ export const PRESETS = [
     label: 'Car breaks down',
     emoji: '🚗',
     fields: ['oneoff'],
-    defaults: { oneoff: 4000, monthly: 0, growthPct: 0, durationYears: 0, incomeReductionPct: 0 },
+    defaults: { oneoff: 4000, monthly: 0, growthPct: 0, durationYears: 0, incomeReductionPct: 0, fundingSource: 'emergencyFund' },
   },
   {
     id: 'illness',
@@ -45,7 +56,7 @@ export const PRESETS = [
     label: 'Illness',
     emoji: '🤒',
     fields: ['monthly', 'durationYears'],
-    defaults: { oneoff: 0, monthly: 400, growthPct: 0, durationYears: 3, incomeReductionPct: 0 },
+    defaults: { oneoff: 0, monthly: 400, growthPct: 0, durationYears: 3, incomeReductionPct: 0, fundingSource: 'emergencyFund' },
   },
   {
     id: 'jobloss',
@@ -53,16 +64,38 @@ export const PRESETS = [
     label: 'Job loss',
     emoji: '💼',
     fields: ['incomeReductionPct', 'durationYears'],
-    defaults: { oneoff: 0, monthly: 0, growthPct: 0, durationYears: 1, incomeReductionPct: 100 },
+    defaults: { oneoff: 0, monthly: 0, growthPct: 0, durationYears: 1, incomeReductionPct: 100, fundingSource: 'emergencyFund' },
   },
   {
     id: 'inheritance',
     category: 'opportunity',
     label: 'Inheritance',
     emoji: '💰',
-    fields: ['oneoff'],
-    defaults: { oneoff: 25000, monthly: 0, growthPct: 0, durationYears: 0, incomeReductionPct: 0 },
+    // No fundingSource here — a windfall isn't "supported by" anything, it's
+    // split across where it goes (see mainSharePct/emergencyFundSharePct/
+    // expensesFundSharePct below; whatever's left over is treated as spent).
+    fields: ['oneoff', 'mainSharePct', 'emergencyFundSharePct', 'expensesFundSharePct'],
+    defaults: {
+      oneoff: 25000,
+      monthly: 0,
+      growthPct: 0,
+      durationYears: 0,
+      incomeReductionPct: 0,
+      mainSharePct: 70,
+      emergencyFundSharePct: 15,
+      expensesFundSharePct: 15,
+    },
   },
+];
+
+// Shown as a "Supported by" selector on life/shock events (opportunities are pure
+// inflows and don't need one). The chosen fund only steps in for whatever the
+// phase's own income can't cover; it absorbs what it can from there, with
+// anything left over overflowing to the main portfolio.
+export const FUNDING_SOURCES = [
+  { value: 'emergencyFund', label: 'Emergency fund' },
+  { value: 'main', label: 'Main portfolio' },
+  { value: 'expenses', label: 'Expenses fund' },
 ];
 
 export const PRESET_BY_ID = Object.fromEntries(PRESETS.map((p) => [p.id, p]));
@@ -73,6 +106,9 @@ export const FIELD_META = {
   growthPct: { label: 'Cost growth %/yr', prefix: '', step: 0.5, suffix: '%' },
   durationYears: { label: 'Duration (yrs)', prefix: '', step: 1, suffix: 'yrs' },
   incomeReductionPct: { label: '% income lost', prefix: '', step: 5, suffix: '%' },
+  mainSharePct: { label: 'To main portfolio %', prefix: '', step: 5, suffix: '%' },
+  emergencyFundSharePct: { label: 'To emergency fund %', prefix: '', step: 5, suffix: '%' },
+  expensesFundSharePct: { label: 'To expenses fund %', prefix: '', step: 5, suffix: '%' },
 };
 
 export function createEventFromPreset(preset, age) {

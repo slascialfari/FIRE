@@ -4,7 +4,7 @@ import MetricsPanel from './components/MetricsPanel';
 import PortfolioChart from './components/PortfolioChart';
 import IncomeChart from './components/IncomeChart';
 import EventTimeline from './components/EventTimeline';
-import EmergencyFundChart from './components/EmergencyFundChart';
+import CashFundsChart from './components/CashFundsChart';
 import { DEFAULT_INPUTS, getCurrentAge, runSimulation } from './lib/simulate';
 import { decodeStateFromUrl, encodeStateToUrl } from './lib/urlState';
 
@@ -56,7 +56,7 @@ function App() {
           <MetricsPanel result={result} inputs={inputs} />
 
           <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/60 p-5 mb-6">
-            <EmergencyFundChart result={result} events={inputs.lifeEvents} />
+            <CashFundsChart result={result} events={inputs.lifeEvents} />
             <div className="h-px bg-slate-200 dark:bg-slate-700 my-4" />
             <EventTimeline
               events={inputs.lifeEvents}

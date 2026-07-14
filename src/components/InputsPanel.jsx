@@ -136,7 +136,7 @@ export default function InputsPanel({ inputs, setField, currentAge, onReset, onS
 
       <SectionCard
         title="Emergency fund"
-        description='A cash buffer tracked separately from the portfolio, checked against "Shit happens" events on the timeline (life events and opportunities are funded/received the normal way).'
+        description="A cash buffer tracked separately from the portfolio. On each event on the timeline, set Supported by to Emergency fund — it only steps in for whatever your income can't cover, with any remaining excess overflowing to the main portfolio."
       >
         <SelectField
           label="Funding approach"
@@ -181,6 +181,58 @@ export default function InputsPanel({ inputs, setField, currentAge, onReset, onS
           onChange={(v) => setField('emergencyFundReturnRate', v)}
           min={0}
           max={5}
+          step={0.1}
+          format={pct}
+        />
+      </SectionCard>
+
+      <SectionCard
+        title="Expenses fund"
+        description="A second cash-like buffer for mid-term, non-emergency costs — invested more like a low-volatility money-market fund. Set an event's Supported by to Expenses fund — it only steps in for whatever your income can't cover, with any remaining excess overflowing to the main portfolio."
+      >
+        <SelectField
+          label="Funding approach"
+          value={inputs.expensesFundMode}
+          onChange={(v) => setField('expensesFundMode', v)}
+          options={[
+            { value: 'build', label: 'Build up over time' },
+            { value: 'lump', label: 'Fixed lump sum today' },
+          ]}
+        />
+        {inputs.expensesFundMode === 'lump' ? (
+          <NumberField
+            label="Current expenses fund balance"
+            prefix="€"
+            value={inputs.expensesFundLumpSum}
+            onChange={(v) => setField('expensesFundLumpSum', v)}
+            step={500}
+          />
+        ) : (
+          <>
+            <NumberField
+              label="Target size"
+              prefix="€"
+              value={inputs.expensesFundTarget}
+              onChange={(v) => setField('expensesFundTarget', v)}
+              step={500}
+            />
+            <NumberField
+              label="Monthly top-up"
+              hint="Stops once the target size is reached"
+              prefix="€"
+              value={inputs.expensesFundMonthlyContribution}
+              onChange={(v) => setField('expensesFundMonthlyContribution', v)}
+              step={25}
+            />
+          </>
+        )}
+        <SliderNumberField
+          label="Return on cash"
+          hint="Real annual return — low-volatility, money-market-like, so a bit higher than the emergency fund's cash return"
+          value={inputs.expensesFundReturnRate}
+          onChange={(v) => setField('expensesFundReturnRate', v)}
+          min={0}
+          max={6}
           step={0.1}
           format={pct}
         />

@@ -16,7 +16,8 @@ export const PHASE_COLORS = {
 export const INCOME_COLORS = {
   work: { light: '#2a78d6', dark: '#3987e5', label: 'Work income' },
   portfolio: { light: '#4a3aa7', dark: '#9085e9', label: 'Portfolio withdrawals' },
-  emergencyFund: { light: '#1baf7a', dark: '#199e70', label: 'Emergency fund' },
+  emergencyFund: { light: '#eda100', dark: '#c98500', label: 'Emergency fund' },
+  expensesFund: { light: '#eb6834', dark: '#d95926', label: 'Expenses fund' },
   pension: { light: '#008300', dark: '#008300', label: 'Pension income' },
   gap: { light: '#d03b3b', dark: '#d03b3b', label: 'Unfunded gap' },
 };

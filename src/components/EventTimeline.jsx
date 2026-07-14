@@ -1,9 +1,10 @@
 import { useState } from 'react';
-import { CATEGORIES, PRESETS, PRESET_BY_ID, FIELD_META, createEventFromPreset } from '../lib/eventPresets';
+import { CATEGORIES, PRESETS, PRESET_BY_ID, FIELD_META, FUNDING_SOURCES, createEventFromPreset } from '../lib/eventPresets';
 import { END_AGE } from '../lib/simulate';
 import { useDarkMode } from '../hooks/useDarkMode';
 import { useElementWidth } from '../hooks/useElementWidth';
 import { EVENT_CATEGORY_COLORS, pick } from '../lib/theme';
+import { DaycareCalculator, IllnessTypePicker } from './EventCalculators';
 
 const inputClass =
   'w-full px-2 py-1.5 text-sm rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 outline-none focus:ring-2 focus:ring-blue-500 text-slate-800 dark:text-slate-100 tabular-nums';
@@ -192,7 +193,52 @@ export default function EventTimeline({ events, setEvents, currentAge }) {
                 />
               </label>
             ))}
+            {selectedPreset.category !== 'opportunity' && (
+              <label className="block">
+                <span className="block text-slate-400 dark:text-slate-500 mb-1">Supported by</span>
+                <select
+                  value={selectedEvent.fundingSource || 'main'}
+                  onChange={(e) => updateEvent(selectedEvent.id, { fundingSource: e.target.value })}
+                  className={inputClass}
+                >
+                  {FUNDING_SOURCES.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
           </div>
+
+          {selectedPreset.category === 'opportunity' && (
+            <p className="mt-2 text-xs text-slate-400 dark:text-slate-500">
+              {(() => {
+                const total =
+                  (Number(selectedEvent.mainSharePct) || 0) +
+                  (Number(selectedEvent.emergencyFundSharePct) || 0) +
+                  (Number(selectedEvent.expensesFundSharePct) || 0);
+                if (total > 100) return `Shares add up to ${total}% — scaled down proportionally to fit 100%.`;
+                if (total === 100) return 'Fully allocated — nothing left over to spend.';
+                return `Remaining ${100 - total}% is treated as spent — no lasting effect on any fund.`;
+              })()}
+            </p>
+          )}
+
+          {selectedPreset.id === 'child' && (
+            <DaycareCalculator
+              event={selectedEvent}
+              onUpdate={(patch) => updateEvent(selectedEvent.id, patch)}
+              onApply={(monthly) => updateEvent(selectedEvent.id, { monthly })}
+            />
+          )}
+          {selectedPreset.id === 'illness' && (
+            <IllnessTypePicker
+              onSelect={(t) =>
+                updateEvent(selectedEvent.id, { monthly: t.monthly, durationYears: t.durationYears, label: t.label })
+              }
+            />
+          )}
         </div>
       )}
     </div>
